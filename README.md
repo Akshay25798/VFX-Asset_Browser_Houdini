@@ -1,1 +1,1 @@
-# VFX-Asset_Browser_Houdini
+# VFX-Houdini_Asset_Browser
