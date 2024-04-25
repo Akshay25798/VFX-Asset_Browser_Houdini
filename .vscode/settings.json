@@ -6,5 +6,10 @@
     "python.analysis.extraPaths": [
         "C:\\Program Files\\Side Effects Software\\Houdini 19.5.640\\houdini\\python3.7libs",
         "C:\\Program Files\\Side Effects Software\\Houdini 19.5.640\\python37\\lib\\site-packages-forced"
-    ]
+    ],
+    "python.analysis.autoImportCompletions": true
+
+    
+    
+
 }
