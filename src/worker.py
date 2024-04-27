@@ -1,38 +1,36 @@
-import re
-from unittest import result
-from PySide2 import QtCore
-from PySide2.QtCore import Slot
 import sys
 import traceback
+from PySide2.QtCore import QRunnable, QObject, Slot
+from PySide2.QtCore import Signal
 
-class WorkerSignal(QtCore.QObject):
-    finished = QtCore.Signal()
-    error = QtCore.Signal(tuple)
-    result = QtCore.Signal(object)
-    prograss = QtCore.Signal(int)
 
-class Worker(QtCore.QRunnable):
-    #wroker thread
-    def __init__(self, fn, *args, **kwargs):
-        super(Worker, self).__init__()
+class Signals(QObject):
+    finished = Signal()
+    error = Signal(tuple)
+    result = Signal(object)
+    progress = Signal(int)
 
-        self.fn = fn
+class Worker(QRunnable):
+    def __init__(self, n, *args, **kwargs):
+        super().__init__()
+
+        self.n = n
         self.args = args
         self.kwargs = kwargs
-        self.signal = WorkerSignal()
+        self.signals = Signals()
 
         #add signals to kwargs
-        self.kwargs["process_callback"] = self.signals.prograss
+        self.kwargs["progress_callback"] = self.signals.progress
 
     @Slot()
     def run(self):
         try:
-            result = self.fn(*self.args, **self.kwargs)
+            result = self.n(*self.args, **self.kwargs)
         except:
             traceback.print_exc()
             exctype, value = sys.exc_info()[:2]
-            self.signal.error.emit((exctype, value, traceback.format_exc()))
+            self.signals.error.emit((exctype, value, traceback.format_exc()))
         else:
-            self.signal.result.emit(result)
+            self.signals.result.emit(result)
         finally:
-            self.signal.finished.emit()
+            self.signals.finished.emit()
