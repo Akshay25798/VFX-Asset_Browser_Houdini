@@ -47,7 +47,7 @@
      <item>
       <layout class="QHBoxLayout" name="horizontalLayout_2">
        <item>
-        <widget class="QComboBox" name="comboBox_3">
+        <widget class="QComboBox" name="assetTypes">
          <property name="font">
           <font>
            <family>Roboto</family>
@@ -102,7 +102,7 @@
         </spacer>
        </item>
        <item>
-        <widget class="QComboBox" name="comboBox_4">
+        <widget class="QComboBox" name="catagories">
          <item>
           <property name="text">
            <string>catagories</string>
@@ -118,7 +118,7 @@
         </widget>
        </item>
        <item>
-        <widget class="QComboBox" name="comboBox">
+        <widget class="QComboBox" name="texRes">
          <item>
           <property name="text">
            <string>1k</string>
@@ -137,7 +137,7 @@
         </widget>
        </item>
        <item>
-        <widget class="QComboBox" name="comboBox_2">
+        <widget class="QComboBox" name="assetFormat">
          <item>
           <property name="text">
            <string>exr</string>

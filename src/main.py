@@ -1,6 +1,3 @@
-import re
-import time
-from tkinter import font
 import hou
 from PySide2 import QtNetwork
 from PySide2 import QtWidgets, QtGui, QtCore
@@ -45,7 +42,6 @@ class ImgDownloader(QtCore.QObject):
         icon = QtGui.QIcon()
         icon.addPixmap(self.pixmap)
         self.parent().setIcon(icon)
-        # self.parent().setPixmap(self.pixmap)
 
 
 class MainAssetBrowserUI(QtWidgets.QWidget):
@@ -68,9 +64,13 @@ class MainAssetBrowserUI(QtWidgets.QWidget):
         #get ui widgets from ui file
         self.contentArea = self.ui.ContantArea
         self.progress_bar = self.ui.progressBar
-        self.statu_bar = self.ui.statusBar
+        self.status_bar = self.ui.statusBar
         self.icon_size_slider = self.ui.iconSize
         self.scrol_area_splitter = self.ui.scrollAreaSplitter
+        self.tex_res = self.ui.texRes
+        self.asset_format = self.ui.assetFormat
+
+        # print(self.tex_res.currentText(), self.asset_format.currentText())
 
         #main layout and parameters
         self.main_layout = QtWidgets.QVBoxLayout()
@@ -85,6 +85,7 @@ class MainAssetBrowserUI(QtWidgets.QWidget):
         self.progress_bar.setProperty("visible", False)
         self.set_icons()
         self.icon_size_slider.valueChanged.connect(self.set_icons_size)
+        self.tex_res.currentIndexChanged.connect(self.check_asset_download_status)
 
     ##--functions starts--
 
@@ -96,11 +97,10 @@ class MainAssetBrowserUI(QtWidgets.QWidget):
         hdriUrl = "https://api.polyhaven.com/assets?t=hdris&c=studio"
         r = requests.get(hdriUrl)
         self.data = json.loads(r.content)
-
         assets_view = FlowLayout(self.widget)
+        assets_view.setSpacing(4)
 
         for key in self.data.keys():
-            # icon_widget = QtWidgets.QWidget()
             btn = QtWidgets.QToolButton()
             btn.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
             btn.setFixedSize(QtCore.QSize(size, size))
@@ -108,41 +108,53 @@ class MainAssetBrowserUI(QtWidgets.QWidget):
             btn.setText(key.replace("_", " ").title())
             btn.setObjectName(key)
             btn.setStyleSheet("QToolButton{font-family: Roboto}")
-            # icon_widget.addWidget(btn)
 
             url = "https://cdn.polyhaven.com/asset_img/thumbs/" + key + ".png?height=" + str(500)
-
             req = QtNetwork.QNetworkRequest(QtCore.QUrl(url))
             
             download = ImgDownloader(btn, req)
             download.start_fetch(self.download_queue)
 
             assets_view.addWidget(btn)
-            
+            self.setLayout(self.main_layout)
+
             #connect funtion to button
             btn.clicked.connect(self.asset_clicked)
 
-            self.setLayout(self.main_layout)
+            self.check_asset_download_status()            
 
+
+    def check_asset_download_status(self):
+        icons = self.contentArea.findChildren(QtWidgets.QToolButton)
+        border_size = 3
+        # assets_in_local = []
+        for icon in icons:
+            assets_in_local = (("{0}_{1}.{2}".format(icon.objectName(), self.tex_res.currentText(), self.asset_format.currentText())))
+            if assets_in_local in os.listdir(download_folder):
+                icon.setStyleSheet("QToolButton{border: %spx solid #32CD32}"%(border_size))
 
     def set_icons_size(self, size):
         icons = self.contentArea.findChildren(QtWidgets.QToolButton)
         font_size = int(5*(int(size)*0.01))
+        border_size = 3
 
         for icon in icons:
             icon.setFixedSize(QtCore.QSize(size, size))
             icon.setIconSize(QtCore.QSize(size, size))
             icon.setStyleSheet("QToolButton{font-size: %spt}"%(str(font_size)))
-        self.statu_bar.setText("icon size : " + str(size))
+
+            assets_in_local = (("{0}_{1}.{2}".format(icon.objectName(), self.tex_res.currentText(), self.asset_format.currentText())))
+            if assets_in_local in os.listdir(download_folder):
+                icon.setStyleSheet("QToolButton{border: %spx solid #32CD32; font-size: %spt}"%(border_size, str(font_size)))
+        self.status_bar.setText("icon size : " + str(size))
         
-           
 
     def asset_clicked(self):
         name = self.sender().objectName()
-        tex_res = "1k"
-        asset_fomat = "exr"
+        tex_res = self.tex_res.currentText()
+        asset_fomat = self.asset_format.currentText()
         path_to_check = "{0}{1}_{2}.{3}".format(download_folder, name, tex_res, asset_fomat)
-        # print(path_to_check)
+        # print(tex_res)
         if not os.path.exists(path_to_check):
             self.progress_bar.setProperty("visible", True)
             self.progress_bar.setValue(0)
@@ -186,17 +198,19 @@ class MainAssetBrowserUI(QtWidgets.QWidget):
     def progress_fn(self, n):
         # print("Progress : " , n)
         i = self.progress_bar.setValue(n)
-        self.statu_bar.setText(str(os.path.basename(self.url)) + ", Downloading : " + str(n))
+        self.status_bar.setText(str(os.path.basename(self.url)) + ", Downloading : " + str(n))
 
     def print_output(self, s):
-        print("Result : ", s)
+        # print("Result : ", s)
+        pass
 
     def thread_complete(self):
-        self.statu_bar.setText(str(os.path.basename(self.url)))
+        self.status_bar.setText(str(os.path.basename(self.url)))
         self.progress_bar.setProperty("visible", False)
+        self.check_asset_download_status()
         # print("Task Done!")
 
-    def get_icon(icon, size=50):
+    def get_houdini_icon(icon, size=50):
         size = int(size)
         try:
             iconresult = hou.ui.createQtIcon(icon, size, size)
