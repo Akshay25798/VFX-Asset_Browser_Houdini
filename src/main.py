@@ -51,7 +51,6 @@ class ImgDownloader(QtCore.QObject):
 class MainAssetBrowserUI(QtWidgets.QWidget):
     def __init__(self):
         super(MainAssetBrowserUI, self).__init__()
-
         #managers 
         self.download_queue = QtNetwork.QNetworkAccessManager()
         self.threadpool = QtCore.QThreadPool.globalInstance()
@@ -87,6 +86,8 @@ class MainAssetBrowserUI(QtWidgets.QWidget):
         self.set_icons()
         self.icon_size_slider.valueChanged.connect(self.set_icons_size)
 
+    ##--functions starts--
+
     def set_icons(self, size=200):
         # print(size)
         #Poly Haven API
@@ -99,6 +100,7 @@ class MainAssetBrowserUI(QtWidgets.QWidget):
         assets_view = FlowLayout(self.widget)
 
         for key in self.data.keys():
+            # icon_widget = QtWidgets.QWidget()
             btn = QtWidgets.QToolButton()
             btn.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
             btn.setFixedSize(QtCore.QSize(size, size))
@@ -106,6 +108,7 @@ class MainAssetBrowserUI(QtWidgets.QWidget):
             btn.setText(key.replace("_", " ").title())
             btn.setObjectName(key)
             btn.setStyleSheet("QToolButton{font-family: Roboto}")
+            # icon_widget.addWidget(btn)
 
             url = "https://cdn.polyhaven.com/asset_img/thumbs/" + key + ".png?height=" + str(500)
 
@@ -193,5 +196,11 @@ class MainAssetBrowserUI(QtWidgets.QWidget):
         self.progress_bar.setProperty("visible", False)
         # print("Task Done!")
 
-
+    def get_icon(icon, size=50):
+        size = int(size)
+        try:
+            iconresult = hou.ui.createQtIcon(icon, size, size)
+        except hou.OperationFailed:
+            iconresult = hou.ui.createQtIcon("VIEW_visualization_scene", size, size)
+        return iconresult
     
