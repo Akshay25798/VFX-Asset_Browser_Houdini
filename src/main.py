@@ -1,5 +1,6 @@
 import re
 import time
+from tkinter import font
 import hou
 from PySide2 import QtNetwork
 from PySide2 import QtWidgets, QtGui, QtCore
@@ -9,10 +10,21 @@ import json, requests, os
 from .worker import Worker
 from .flowLayout import FlowLayout
 
-#get actual main.py file path
+##
+#path construntion
 workpath = os.path.join(os.path.dirname(__file__))
 #print(workpath + "\\ui\\mainUI.ui")
 
+font_path = workpath + "\\assets\\fonts\\"
+font_id = QtGui.QFontDatabase.addApplicationFont(font_path + "Roboto-Medium.ttf")
+# print(QtGui.QFontDatabase.applicationFontFamilies(font_id))
+
+ui_file_path = workpath + "\\ui\\mainUI.ui"
+
+download_folder = os.path.dirname(workpath) + "\\downloads\\"
+
+
+##
 
 class ImgDownloader(QtCore.QObject):
     def __init__(self, parent, req):
@@ -52,7 +64,7 @@ class MainAssetBrowserUI(QtWidgets.QWidget):
 
         #load ui file
         self.loader = QUiLoader()
-        self.ui = self.loader.load(workpath + "\\ui\\mainUI.ui")
+        self.ui = self.loader.load(ui_file_path)
 
         #get ui widgets from ui file
         self.contentArea = self.ui.ContantArea
@@ -66,23 +78,19 @@ class MainAssetBrowserUI(QtWidgets.QWidget):
         self.main_layout.setContentsMargins(0,0,0,0)
         self.main_layout.addWidget(self.ui)
 
-        self.icon_size_slider.valueChanged.connect(self.set_icons)
-
         #setup for flowlayout
         self.widget = QtWidgets.QWidget()
         self.contentArea.setWidget(self.widget)
 
+        #set property
+        self.progress_bar.setProperty("visible", False)
+        self.set_icons()
+        self.icon_size_slider.valueChanged.connect(self.set_icons_size)
 
-        self.icon_size = self.icon_size_slider.value()
-        self.set_icons(self.icon_size)
-
-        
-
-    def set_icons(self, icon_size):
-        print(icon_size)
+    def set_icons(self, size=200):
+        # print(size)
         #Poly Haven API
         # https://cdn.polyhaven.com/asset_img/thumbs/hikers_cave.png
-        
         # hdriUrl = "https://api.polyhaven.com/assets?t=hdris"
         hdriUrl = "https://api.polyhaven.com/assets?t=hdris&c=studio"
         r = requests.get(hdriUrl)
@@ -91,54 +99,67 @@ class MainAssetBrowserUI(QtWidgets.QWidget):
         assets_view = FlowLayout(self.widget)
 
         for key in self.data.keys():
+            btn = QtWidgets.QToolButton()
+            btn.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+            btn.setFixedSize(QtCore.QSize(size, size))
+            btn.setIconSize(QtCore.QSize(size, size))
+            btn.setText(key.replace("_", " ").title())
+            btn.setObjectName(key)
+            btn.setStyleSheet("QToolButton{font-family: Roboto}")
 
-            self.btn = QtWidgets.QToolButton()
-            self.btn.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
-            self.btn.setFixedSize(QtCore.QSize(icon_size, icon_size))
-            self.btn.setIconSize(QtCore.QSize(icon_size, icon_size))
-            self.btn.setText(key.replace("_", " ").title())
-            self.btn.setObjectName(key)
-
-            url = "https://cdn.polyhaven.com/asset_img/thumbs/" + key + ".png?height=" + str(200)
+            url = "https://cdn.polyhaven.com/asset_img/thumbs/" + key + ".png?height=" + str(500)
 
             req = QtNetwork.QNetworkRequest(QtCore.QUrl(url))
             
-            download = ImgDownloader(self.btn, req)
+            download = ImgDownloader(btn, req)
             download.start_fetch(self.download_queue)
 
-            assets_view.addWidget(self.btn)
+            assets_view.addWidget(btn)
             
             #connect funtion to button
-            self.btn.clicked.connect(self.asset_clicked)
+            btn.clicked.connect(self.asset_clicked)
 
             self.setLayout(self.main_layout)
 
-            
+
+    def set_icons_size(self, size):
+        icons = self.contentArea.findChildren(QtWidgets.QToolButton)
+        font_size = int(5*(int(size)*0.01))
+
+        for icon in icons:
+            icon.setFixedSize(QtCore.QSize(size, size))
+            icon.setIconSize(QtCore.QSize(size, size))
+            icon.setStyleSheet("QToolButton{font-size: %spt}"%(str(font_size)))
+        self.statu_bar.setText("icon size : " + str(size))
+        
            
 
     def asset_clicked(self):
         name = self.sender().objectName()
-        print(name)
-
         tex_res = "1k"
         asset_fomat = "exr"
-        asset_json = requests.get("https://api.polyhaven.com/files/" + name).json()
-        # print(asset_json)
-        self.url = asset_json["hdri"][tex_res][asset_fomat]["url"]
-        self.file_size = asset_json["hdri"][tex_res][asset_fomat]["size"]
+        path_to_check = "{0}{1}_{2}.{3}".format(download_folder, name, tex_res, asset_fomat)
+        # print(path_to_check)
+        if not os.path.exists(path_to_check):
+            self.progress_bar.setProperty("visible", True)
+            self.progress_bar.setValue(0)
+            asset_json = requests.get("https://api.polyhaven.com/files/" + name).json()
+            # print(asset_json)
+            self.url = asset_json["hdri"][tex_res][asset_fomat]["url"]
+            self.file_size = asset_json["hdri"][tex_res][asset_fomat]["size"]
 
-        local_file_name = os.path.dirname(workpath) + "\\downloads\\" + os.path.basename(self.url)
-        self.local_file = open(local_file_name, "wb")
+            local_file_name = download_folder + os.path.basename(self.url)
+            self.local_file = open(local_file_name, "wb")
 
+            #worker for download assets
+            worker = Worker(self.downloadImage)
+            worker.signals.result.connect(self.print_output)
+            worker.signals.finished.connect(self.thread_complete)
+            worker.signals.progress.connect(self.progress_fn)
 
-        #worker for download assets
-        worker = Worker(self.downloadImage)
-        worker.signals.result.connect(self.print_output)
-        worker.signals.finished.connect(self.thread_complete)
-        worker.signals.progress.connect(self.progress_fn)
-
-        #start the workder thread / execute
-        self.threadpool.start(worker)
+            #start the workder thread / execute
+            self.threadpool.start(worker)
+        
 
 
     def downloadImage(self, progress_callback):
@@ -169,7 +190,8 @@ class MainAssetBrowserUI(QtWidgets.QWidget):
 
     def thread_complete(self):
         self.statu_bar.setText(str(os.path.basename(self.url)))
-        print("Task Done!")
+        self.progress_bar.setProperty("visible", False)
+        # print("Task Done!")
 
 
     

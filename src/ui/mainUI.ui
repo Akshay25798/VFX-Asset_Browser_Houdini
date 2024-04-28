@@ -179,7 +179,7 @@
           <rect>
            <x>0</x>
            <y>0</y>
-           <width>477</width>
+           <width>410</width>
            <height>453</height>
           </rect>
          </property>
@@ -194,7 +194,7 @@
           <rect>
            <x>0</x>
            <y>0</y>
-           <width>342</width>
+           <width>409</width>
            <height>453</height>
           </rect>
          </property>
@@ -250,8 +250,14 @@
          <property name="alignment">
           <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
          </property>
+         <property name="textVisible">
+          <bool>true</bool>
+         </property>
          <property name="orientation">
           <enum>Qt::Horizontal</enum>
+         </property>
+         <property name="format">
+          <string>%p%</string>
          </property>
         </widget>
        </item>
