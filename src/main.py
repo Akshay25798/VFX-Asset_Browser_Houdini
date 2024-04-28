@@ -4,6 +4,8 @@ from PySide2 import QtWidgets, QtGui, QtCore
 from PySide2.QtUiTools import QUiLoader
 from PySide2.QtCore import Qt
 import json, requests, os
+
+import layout
 from .worker import Worker
 from .flowLayout import FlowLayout
 
@@ -20,14 +22,29 @@ ui_file_path = workpath + "\\ui\\mainUI.ui"
 
 download_folder = os.path.dirname(workpath) + "\\downloads\\"
 
+thumbnail_folder = download_folder + "thumbnails\\"
+
 
 ##
 
-class ImgDownloader(QtCore.QObject):
+
+def get_houdini_icon(icon, size=50):
+    size = int(size)
+    try:
+        iconresult = hou.ui.createQtIcon(icon, size, size)
+    except hou.OperationFailed:
+        iconresult = hou.ui.createQtIcon("VIEW_visualization_scene", size, size)
+    return iconresult
+
+
+##--class starts
+
+class IconDownloader(QtCore.QObject):
     def __init__(self, parent, req):
         self.req = req
         self.pixmap = QtGui.QPixmap()
-        super(ImgDownloader, self).__init__(parent)
+        super(IconDownloader, self).__init__(parent)
+
 
     def start_fetch(self, net_mgr):
         self.fetch_task = net_mgr.get(self.req)
@@ -38,10 +55,20 @@ class ImgDownloader(QtCore.QObject):
         self.set_widget_image(the_reply)
 
     def set_widget_image(self, img_binary):
-        self.pixmap.loadFromData(img_binary)
+        local_file_path = thumbnail_folder + self.parent().objectName() + ".png"
+        local_thumbnail_file = open(local_file_path, "wb")
+        local_thumbnail_file.write(img_binary)
+        local_thumbnail_file.close()
+
         icon = QtGui.QIcon()
-        icon.addPixmap(self.pixmap)
+        icon.addPixmap(local_file_path)
         self.parent().setIcon(icon)
+
+        # self.pixmap.loadFromData(img_binary) #load directly form web/api
+        # icon = QtGui.QIcon()
+        # icon.addPixmap(self.pixmap)
+        # self.parent().setIcon(icon)
+
 
 
 class MainAssetBrowserUI(QtWidgets.QWidget):
@@ -55,7 +82,6 @@ class MainAssetBrowserUI(QtWidgets.QWidget):
         self.file_size = None
         self.local_file = None
         self.data = None
-        
 
         #load ui file
         self.loader = QUiLoader()
@@ -69,8 +95,8 @@ class MainAssetBrowserUI(QtWidgets.QWidget):
         self.scrol_area_splitter = self.ui.scrollAreaSplitter
         self.tex_res = self.ui.texRes
         self.asset_format = self.ui.assetFormat
+        self.asset_type = self.ui.assetTypes
 
-        # print(self.tex_res.currentText(), self.asset_format.currentText())
 
         #main layout and parameters
         self.main_layout = QtWidgets.QVBoxLayout()
@@ -80,58 +106,99 @@ class MainAssetBrowserUI(QtWidgets.QWidget):
         #setup for flowlayout
         self.widget = QtWidgets.QWidget()
         self.contentArea.setWidget(self.widget)
+        self.assets_view = FlowLayout(self.widget)
 
         #set property
         self.progress_bar.setProperty("visible", False)
-        self.set_icons()
+        self.get_asset_type()
+        # self.set_icons()
+        self.asset_type.currentIndexChanged.connect(self.get_asset_type)
         self.icon_size_slider.valueChanged.connect(self.set_icons_size)
         self.tex_res.currentIndexChanged.connect(self.check_asset_download_status)
+        self.asset_format.currentIndexChanged.connect(self.check_asset_download_status)
+
+
+
 
     ##--functions starts--
 
-    def set_icons(self, size=200):
-        # print(size)
+    def get_asset_type(self):
         #Poly Haven API
         # https://cdn.polyhaven.com/asset_img/thumbs/hikers_cave.png
         # hdriUrl = "https://api.polyhaven.com/assets?t=hdris"
-        hdriUrl = "https://api.polyhaven.com/assets?t=hdris&c=studio"
-        r = requests.get(hdriUrl)
+        # texUrl = "https://api.polyhaven.com/assets?t=textures"
+        # 3dModelUrl = "https://api.polyhaven.com/assets?t=models"
+        # hdriUrl = "https://api.polyhaven.com/assets?t=hdris&c=studio"
+        if self.asset_type.currentIndex() == 0:
+            self.Url = "https://api.polyhaven.com/assets?t=hdris&c=studio"
+        elif self.asset_type.currentIndex() == 1:
+            self.Url = "https://api.polyhaven.com/assets?t=textures&c=plaster"
+        elif self.asset_type.currentIndex() == 2:
+            self.Url = "https://api.polyhaven.com/assets?t=models&c=rocks"
+        else:
+            self.Url = "https://api.polyhaven.com/assets?t=hdris&c=studio"
+        self.clear_layout(self.assets_view)
+        self.set_icons()
+        
+
+    def clear_layout(self, layout):
+        while layout.count():
+            child = layout.takeAt(0)
+            print(child)
+            if child.widget():
+                child.widget().deleteLater()
+
+    def set_icons(self, size=200):
+
+        r = requests.get(self.Url)
         self.data = json.loads(r.content)
-        assets_view = FlowLayout(self.widget)
-        assets_view.setSpacing(4)
 
         for key in self.data.keys():
             btn = QtWidgets.QToolButton()
-            btn.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+            btn.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)  
             btn.setFixedSize(QtCore.QSize(size, size))
             btn.setIconSize(QtCore.QSize(size, size))
             btn.setText(key.replace("_", " ").title())
             btn.setObjectName(key)
             btn.setStyleSheet("QToolButton{font-family: Roboto}")
 
-            url = "https://cdn.polyhaven.com/asset_img/thumbs/" + key + ".png?height=" + str(500)
-            req = QtNetwork.QNetworkRequest(QtCore.QUrl(url))
-            
-            download = ImgDownloader(btn, req)
-            download.start_fetch(self.download_queue)
 
-            assets_view.addWidget(btn)
+            thumb_name = (("{0}.png".format(btn.objectName())))
+            if not thumb_name in os.listdir(thumbnail_folder):
+
+                url = "https://cdn.polyhaven.com/asset_img/thumbs/" + key + ".png?height=" + str(500)
+                req = QtNetwork.QNetworkRequest(QtCore.QUrl(url))
+                
+                download = IconDownloader(btn, req)
+                download.start_fetch(self.download_queue)
+                self.assets_view.addWidget(btn)
+                self.assets_view.setSpacing(4)
+                self.setLayout(self.main_layout)
+
+            #get icons form local thumbnail folder
+            get_local_thumb = thumbnail_folder + thumb_name
+            icon = QtGui.QIcon()
+            icon.addPixmap(get_local_thumb)
+            btn.setIcon(icon)
+
+            #icon add to content area
+            self.assets_view.addWidget(btn)
             self.setLayout(self.main_layout)
 
             #connect funtion to button
             btn.clicked.connect(self.asset_clicked)
-
-            self.check_asset_download_status()            
+            self.set_icons_size(200)
 
 
     def check_asset_download_status(self):
         icons = self.contentArea.findChildren(QtWidgets.QToolButton)
         border_size = 3
-        # assets_in_local = []
         for icon in icons:
-            assets_in_local = (("{0}_{1}.{2}".format(icon.objectName(), self.tex_res.currentText(), self.asset_format.currentText())))
-            if assets_in_local in os.listdir(download_folder):
+            local_asset_name = (("{0}_{1}.{2}".format(icon.objectName(), self.tex_res.currentText(), self.asset_format.currentText())))
+            if local_asset_name in os.listdir(download_folder):
                 icon.setStyleSheet("QToolButton{border: %spx solid #32CD32}"%(border_size))
+            else:
+                icon.setStyleSheet("QToolButton{border: %spx solid #32CD32}"%(0))
 
     def set_icons_size(self, size):
         icons = self.contentArea.findChildren(QtWidgets.QToolButton)
@@ -143,9 +210,11 @@ class MainAssetBrowserUI(QtWidgets.QWidget):
             icon.setIconSize(QtCore.QSize(size, size))
             icon.setStyleSheet("QToolButton{font-size: %spt}"%(str(font_size)))
 
-            assets_in_local = (("{0}_{1}.{2}".format(icon.objectName(), self.tex_res.currentText(), self.asset_format.currentText())))
-            if assets_in_local in os.listdir(download_folder):
+            local_asset_name = (("{0}_{1}.{2}".format(icon.objectName(), self.tex_res.currentText(), self.asset_format.currentText())))
+            if local_asset_name in os.listdir(download_folder):
                 icon.setStyleSheet("QToolButton{border: %spx solid #32CD32; font-size: %spt}"%(border_size, str(font_size)))
+            else:
+                icon.setStyleSheet("QToolButton{border: %spx solid #32CD32; font-size: %spt}"%(0, str(font_size)))
         self.status_bar.setText("icon size : " + str(size))
         
 
@@ -194,7 +263,6 @@ class MainAssetBrowserUI(QtWidgets.QWidget):
 
         self.local_file.close()
 
-
     def progress_fn(self, n):
         # print("Progress : " , n)
         i = self.progress_bar.setValue(n)
@@ -210,11 +278,11 @@ class MainAssetBrowserUI(QtWidgets.QWidget):
         self.check_asset_download_status()
         # print("Task Done!")
 
-    def get_houdini_icon(icon, size=50):
-        size = int(size)
-        try:
-            iconresult = hou.ui.createQtIcon(icon, size, size)
-        except hou.OperationFailed:
-            iconresult = hou.ui.createQtIcon("VIEW_visualization_scene", size, size)
-        return iconresult
+    # def download_thumbnails(self):
+
+    #     for key in url_dict:
+    #         file_name = key.replace(' ', '_')
+    #         img = Image.open(requests.get(url_dict[key], stream = True).raw)
+    #         img.save(f'images/{file_name}.{img.format.lower()}')
+
     

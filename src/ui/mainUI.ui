@@ -56,6 +56,9 @@
            <bold>true</bold>
           </font>
          </property>
+         <property name="currentIndex">
+          <number>1</number>
+         </property>
          <item>
           <property name="text">
            <string>HDRIs</string>
@@ -119,6 +122,9 @@
        </item>
        <item>
         <widget class="QComboBox" name="texRes">
+         <property name="currentIndex">
+          <number>1</number>
+         </property>
          <item>
           <property name="text">
            <string>1k</string>
@@ -171,6 +177,9 @@
         <enum>Qt::Horizontal</enum>
        </property>
        <widget class="QScrollArea" name="ContantArea">
+        <property name="acceptDrops">
+         <bool>false</bool>
+        </property>
         <property name="widgetResizable">
          <bool>true</bool>
         </property>
