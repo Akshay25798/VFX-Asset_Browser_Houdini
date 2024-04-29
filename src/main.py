@@ -12,7 +12,6 @@ from .flowLayout import FlowLayout
 ##
 #path construntion
 workpath = os.path.join(os.path.dirname(__file__))
-#print(workpath + "\\ui\\mainUI.ui")
 
 font_path = workpath + "\\assets\\fonts\\"
 font_id = QtGui.QFontDatabase.addApplicationFont(font_path + "Roboto-Medium.ttf")
@@ -24,9 +23,15 @@ download_folder = os.path.dirname(workpath) + "\\downloads\\"
 
 thumbnail_folder = download_folder + "thumbnails\\"
 
+json_folder = download_folder + "json\\"
 
 ##
+#Poly Haven API - Url links
+main_api =  "https://api.polyhaven.com/"
+thumb_url = "https://cdn.polyhaven.com/asset_img/thumbs/"
+asset_url = "https://api.polyhaven.com/files/"
 
+#
 
 def get_houdini_icon(icon, size=50):
     size = int(size)
@@ -96,6 +101,7 @@ class MainAssetBrowserUI(QtWidgets.QWidget):
         self.tex_res = self.ui.texRes
         self.asset_format = self.ui.assetFormat
         self.asset_type = self.ui.assetTypes
+        self.asset_catagories = self.ui.catagories
 
 
         #main layout and parameters
@@ -116,6 +122,9 @@ class MainAssetBrowserUI(QtWidgets.QWidget):
         self.icon_size_slider.valueChanged.connect(self.set_icons_size)
         self.tex_res.currentIndexChanged.connect(self.check_asset_download_status)
         self.asset_format.currentIndexChanged.connect(self.check_asset_download_status)
+        self.asset_catagories.currentIndexChanged.connect(self.get_asset_type)
+
+        
 
 
 
@@ -123,71 +132,105 @@ class MainAssetBrowserUI(QtWidgets.QWidget):
     ##--functions starts--
 
     def get_asset_type(self):
-        #Poly Haven API
-        # https://cdn.polyhaven.com/asset_img/thumbs/hikers_cave.png
-        # hdriUrl = "https://api.polyhaven.com/assets?t=hdris"
-        # texUrl = "https://api.polyhaven.com/assets?t=textures"
-        # 3dModelUrl = "https://api.polyhaven.com/assets?t=models"
-        # hdriUrl = "https://api.polyhaven.com/assets?t=hdris&c=studio"
+        if len(os.listdir(json_folder))==0:
+            self.write_json_to_local()
+
         if self.asset_type.currentIndex() == 0:
-            self.Url = "https://api.polyhaven.com/assets?t=hdris&c=studio"
+            json_foder_index = json_folder + "hdris.json"
+            self.get_cagagories("hdris")
         elif self.asset_type.currentIndex() == 1:
-            self.Url = "https://api.polyhaven.com/assets?t=textures&c=plaster"
+            json_foder_index = json_folder + "models.json"
+            self.get_cagagories("models")
         elif self.asset_type.currentIndex() == 2:
-            self.Url = "https://api.polyhaven.com/assets?t=models&c=rocks"
+            json_foder_index = json_folder + "textures.json"
+            self.get_cagagories("textures")
         else:
-            self.Url = "https://api.polyhaven.com/assets?t=hdris&c=studio"
+            json_foder_index = "https://api.polyhaven.com/assets?t=hdris&c=studio"
+
         self.clear_layout(self.assets_view)
-        self.set_icons()
+        self.set_icons(json_foder_index)
         
+    def get_cagagories(self, asset_type="hdris"):
+        catagory_json = json_folder + asset_type + "_catagories.json"
+        self.asset_catagories.clear()
+        with open(catagory_json, "r") as read_content:
+            d = json.load(read_content)
+            catagory = d.keys()
+            for i, key in enumerate(catagory):
+                self.asset_catagories.insertItem(i, key)
+        self.asset_catagories.setCurrentIndex(1)
+
+
+    def write_json_to_local(self):
+        assets_types = ["hdris", "textures", "models"]
+        for type in assets_types:
+            assets_json = main_api + "assets?t=%s" % (type)
+            categories_json =  main_api + "categories/%s" %(type)
+
+            assets_json_data = requests.get(assets_json).json()
+            categories_json_data = requests.get(categories_json).json()
+            local_assets_json_file = json_folder + type + ".json"
+            local_categories_json_file = json_folder + type + "_catagories.json"
+
+            with open(local_assets_json_file, 'w', encoding='utf-8') as file: #json for assets full data
+                json.dump(assets_json_data, file, ensure_ascii=False, indent=4)
+
+            with open(local_categories_json_file, 'w', encoding='utf-8') as file:#json for catagories only 
+                json.dump(categories_json_data, file, ensure_ascii=False, indent=4)
 
     def clear_layout(self, layout):
         while layout.count():
             child = layout.takeAt(0)
-            print(child)
             if child.widget():
                 child.widget().deleteLater()
 
-    def set_icons(self, size=200):
+    def set_icons(self, json_foder_index, size=200):
+        catagory = self.asset_catagories.currentText()
+        with open(json_foder_index, "r") as read_content:
+            d = json.load(read_content)
+            for key in d.keys():
+                if catagory in (d[key]["categories"]):
+                    # print(key)
 
-        r = requests.get(self.Url)
-        self.data = json.loads(r.content)
+        # with open(json_foder_index, "r") as read_content: #ping the local json
+        #     self.data = json.load(read_content)
+        #     # print(d.keys())
 
-        for key in self.data.keys():
-            btn = QtWidgets.QToolButton()
-            btn.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)  
-            btn.setFixedSize(QtCore.QSize(size, size))
-            btn.setIconSize(QtCore.QSize(size, size))
-            btn.setText(key.replace("_", " ").title())
-            btn.setObjectName(key)
-            btn.setStyleSheet("QToolButton{font-family: Roboto}")
+        # for key in self.data.keys():
+                    btn = QtWidgets.QToolButton()
+                    btn.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)  
+                    btn.setFixedSize(QtCore.QSize(size, size))
+                    btn.setIconSize(QtCore.QSize(size, size))
+                    btn.setText(key.replace("_", " ").title())
+                    btn.setObjectName(key)
+                    btn.setStyleSheet("QToolButton{font-family: Roboto}")
 
 
-            thumb_name = (("{0}.png".format(btn.objectName())))
-            if not thumb_name in os.listdir(thumbnail_folder):
+                    thumb_name = (("{0}.png".format(btn.objectName())))
+                    if not thumb_name in os.listdir(thumbnail_folder):
 
-                url = "https://cdn.polyhaven.com/asset_img/thumbs/" + key + ".png?height=" + str(500)
-                req = QtNetwork.QNetworkRequest(QtCore.QUrl(url))
-                
-                download = IconDownloader(btn, req)
-                download.start_fetch(self.download_queue)
-                self.assets_view.addWidget(btn)
-                self.assets_view.setSpacing(4)
-                self.setLayout(self.main_layout)
+                        url = thumb_url + key + ".png?height=" + str(500)
+                        req = QtNetwork.QNetworkRequest(QtCore.QUrl(url))
+                        
+                        download = IconDownloader(btn, req)
+                        download.start_fetch(self.download_queue)
+                        self.assets_view.addWidget(btn)
+                        self.assets_view.setSpacing(4)
+                        self.setLayout(self.main_layout)
 
-            #get icons form local thumbnail folder
-            get_local_thumb = thumbnail_folder + thumb_name
-            icon = QtGui.QIcon()
-            icon.addPixmap(get_local_thumb)
-            btn.setIcon(icon)
+                    #get icons form local thumbnail folder
+                    get_local_thumb = thumbnail_folder + thumb_name
+                    icon = QtGui.QIcon()
+                    icon.addPixmap(get_local_thumb)
+                    btn.setIcon(icon)
 
-            #icon add to content area
-            self.assets_view.addWidget(btn)
-            self.setLayout(self.main_layout)
+                    #icon add to content area
+                    self.assets_view.addWidget(btn)
+                    self.setLayout(self.main_layout)
 
-            #connect funtion to button
-            btn.clicked.connect(self.asset_clicked)
-            self.set_icons_size(200)
+                    #connect funtion to button
+                    btn.clicked.connect(self.asset_clicked)
+                    self.set_icons_size(200)
 
 
     def check_asset_download_status(self):
@@ -227,7 +270,7 @@ class MainAssetBrowserUI(QtWidgets.QWidget):
         if not os.path.exists(path_to_check):
             self.progress_bar.setProperty("visible", True)
             self.progress_bar.setValue(0)
-            asset_json = requests.get("https://api.polyhaven.com/files/" + name).json()
+            asset_json = requests.get(asset_url + name).json()
             # print(asset_json)
             self.url = asset_json["hdri"][tex_res][asset_fomat]["url"]
             self.file_size = asset_json["hdri"][tex_res][asset_fomat]["size"]
@@ -278,11 +321,5 @@ class MainAssetBrowserUI(QtWidgets.QWidget):
         self.check_asset_download_status()
         # print("Task Done!")
 
-    # def download_thumbnails(self):
-
-    #     for key in url_dict:
-    #         file_name = key.replace(' ', '_')
-    #         img = Image.open(requests.get(url_dict[key], stream = True).raw)
-    #         img.save(f'images/{file_name}.{img.format.lower()}')
 
     

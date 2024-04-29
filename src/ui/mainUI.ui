@@ -57,7 +57,7 @@
           </font>
          </property>
          <property name="currentIndex">
-          <number>1</number>
+          <number>0</number>
          </property>
          <item>
           <property name="text">
@@ -106,9 +106,20 @@
        </item>
        <item>
         <widget class="QComboBox" name="catagories">
+         <property name="currentText">
+          <string>1</string>
+         </property>
+         <property name="currentIndex">
+          <number>1</number>
+         </property>
          <item>
           <property name="text">
            <string>catagories</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>1</string>
           </property>
          </item>
         </widget>
