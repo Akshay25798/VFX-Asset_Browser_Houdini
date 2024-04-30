@@ -6,7 +6,8 @@
  same interface or of the interfaces menu are not allowed
  in a single file. -->
   <interface name="akAssetBrowser" label="Ak Asset Browser" icon="hicon:/SVGIcons.index?BUTTONS_addasset.svg" showNetworkNavigationBar="false" help_url="">
-    <script><![CDATA[import sys
+    <script><![CDATA[print("executing_from_houdini")
+import sys
 sys.path.append("D:\PYTHON\VFX-Asset_Browser_Houdini")
 
 from src import main
