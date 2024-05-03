@@ -1,3 +1,4 @@
+from ast import arg
 import hou
 from PySide2 import QtNetwork
 from PySide2 import QtWidgets, QtGui, QtCore
@@ -6,7 +7,7 @@ from PySide2.QtCore import Qt
 import json, requests, os
 from .worker import Worker
 from .flowLayout import FlowLayout
-from multiprocessing import Process
+import time
 
 ##
 #path construntion
@@ -43,25 +44,7 @@ def get_houdini_icon(icon, size=50):
 
 ##--class starts
 
-class SetLocalIcon(QtCore.QObject):
-    def __init__(self, parent, req):
-        self.req = req
-        self.pixmap = QtGui.QPixmap()
-        super(SetLocalIcon, self).__init__(parent)
 
-    def start_fetch(self, net_mgr):
-        self.fetch_task = net_mgr.get(self.req)
-        self.fetch_task.finished.connect(self.resolve_fetch)
-
-    def resolve_fetch(self):
-        local_file_path = thumbnail_folder + self.parent().objectName() + ".png"
-        with open(local_file_path, mode="rb") as local_thumbnail_file:
-            the_reply = local_thumbnail_file.read()
-            self.set_widget_image(the_reply)
-
-    def set_widget_image(self, img_binary):
-            self.pixmap.loadFromData(img_binary)
-            self.parent().setIcon(self.pixmap)
                        
 class IconDownloader(QtCore.QObject):
     def __init__(self, parent, req):
@@ -91,7 +74,7 @@ class IconDownloader(QtCore.QObject):
 class MainAssetBrowserUI(QtWidgets.QWidget):
     def __init__(self):
         super(MainAssetBrowserUI, self).__init__()
-        print("Asset_Brower_Started")
+        print("Asset_Brower_Started\n")
         #managers 
         self.download_queue = QtNetwork.QNetworkAccessManager()
         self.threadpool = QtCore.QThreadPool.globalInstance()
@@ -127,7 +110,7 @@ class MainAssetBrowserUI(QtWidgets.QWidget):
         self.contentArea.setWidget(self.widget)
         self.assets_view = FlowLayout(self.widget)
 
-        #set property
+        #set ui widgets property
         self.progress_bar.setProperty("visible", False)
 
         self.set_cagagories()
@@ -140,7 +123,9 @@ class MainAssetBrowserUI(QtWidgets.QWidget):
         self.icon_size_slider.valueChanged.connect(self.set_icons_size)
         self.tex_res.currentIndexChanged.connect(self.check_asset_download_status)
         self.asset_format.currentIndexChanged.connect(self.check_asset_download_status)
-        
+
+        self.scrol_area_splitter.setStretchFactor(0,3)
+        self.scrol_area_splitter.setStretchFactor(1,1)
 
         self.setLayout(self.main_layout)
 
@@ -150,7 +135,7 @@ class MainAssetBrowserUI(QtWidgets.QWidget):
     ##--functions starts--
         
 
-    def set_icons(self, size=200):
+    def set_icons(self):
 
         if self.asset_type.currentIndex() == 0:
             json_file = json_folder + "hdris.json"
@@ -163,55 +148,63 @@ class MainAssetBrowserUI(QtWidgets.QWidget):
 
         self.clear_layout(self.assets_view) #clear the content area for new asset
 
-        asset_in_catagory = [] #assets in current catagory
+        self.asset_in_catagory = [] #assets in current catagory
         current_catagory = self.asset_catagories.currentText()
 
         with open(json_file, "r") as read_content: #check if asset in current catagory
             data = json.load(read_content)
             for key in data.keys():
                 if current_catagory in (data[key]["categories"]):
-                    asset_in_catagory.append(key) #add asset to asset_in_catagory list
+                    self.asset_in_catagory.append(key) #add asset to self.asset_in_catagory list
 
-        with open(json_file, "r") as read_content: #ping the local json
-            data = json.load(read_content)
-
-        for key in asset_in_catagory: #get and set thumbnails for assets in catagory
+        for i, key in enumerate(self.asset_in_catagory): #get and set thumbnails for assets in catagory
+            
             btn = QtWidgets.QToolButton()
+            btn.setObjectName(key)
+            self.assets_view.addWidget(btn)
+            btn.clicked.connect(self.asset_clicked)
+            self.status_bar.setText("total assets : %s"%(len(self.asset_in_catagory)))
+            # print(key)
+        # time.sleep(1)
+        total_assets = len(self.asset_in_catagory)
+        worker = Worker(self.set_local_icon, total_assets)
+        worker.signals.progress.connect(self.progress_fn)
+        worker.signals.finished.connect(self.thread_complete)
+        self.threadpool.start(worker)
+
+       
+
+    def set_local_icon(self, total_assets, progress_callback, size=200):
+        icons = self.contentArea.findChildren(QtWidgets.QToolButton)
+        self.progress_bar.setProperty("visible", True)
+        self.progress_bar.setValue(0)
+        print("Thread\n")
+        for i, btn in enumerate(icons):
+            key = str(btn.objectName())
+            print(key)
             btn.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
             btn.setFixedSize(QtCore.QSize(size, size))
             btn.setIconSize(QtCore.QSize(size, size))
-            btn.setText(key.replace("_", " ").title())
-            btn.setObjectName(key)
-            btn.setStyleSheet("QToolButton{font-family: Roboto}")
-            #icon add to content area
-            self.assets_view.setSpacing(4)
-            self.assets_view.addWidget(btn)
+            # btn.setText(key.replace("_", " ").title())
+            # btn.setStyleSheet("QToolButton{font-family: Roboto}")
 
-            thumb_name = ("{0}.png".format(btn.objectName()))
-            if not thumb_name in os.listdir(thumbnail_folder): #get icons form api
-                self.status_bar.setText("downloading %s thumbnail"%(thumb_name))
-                url = thumb_url + key + ".png?height=" + str(500)
-                req = QtNetwork.QNetworkRequest(QtCore.QUrl(url))
+            thumb_name = ("{0}.png".format(key))
+            # if not thumb_name in os.listdir(thumbnail_folder): #get icons form api
+            #     # print("not in local")
+            #     self.status_bar.setText("downloading %s thumbnail"%(thumb_name))
+            #     url = thumb_url + key + ".png?height=" + str(500)
+            #     req = QtNetwork.QNetworkRequest(QtCore.QUrl(url))
                 
-                download = IconDownloader(btn, req)
-                download.start_fetch(self.download_queue)
+            #     download = IconDownloader(btn, req)
+            #     download.start_fetch(self.download_queue)
 
-            #get icons form local thumbnail folder
             get_local_thumb = thumbnail_folder + thumb_name
-            
-            local_icon = SetLocalIcon(btn, QtNetwork.QNetworkRequest(QtCore.QUrl(get_local_thumb)))
-            local_icon.start_fetch(self.download_queue)
-            
-            # self.set_local_icon(btn, get_local_thumb)
-
-            #connect funtion to button
-            btn.clicked.connect(self.asset_clicked)
-            self.set_icons_size(self.icon_size_slider.value())
-            self.status_bar.setText("total assets : %s"%(len(asset_in_catagory)))
-
-
-        self.setLayout(self.main_layout)
-
+            icon = QtGui.QIcon()
+            icon.addPixmap(get_local_thumb)
+            btn.setIcon(icon)
+            # # print(os.listdir(thumbnail_folder))
+            progress = int(i) / int(total_assets) * 100
+            progress_callback.emit(progress)
 
 
     def set_cagagories(self):
@@ -237,7 +230,6 @@ class MainAssetBrowserUI(QtWidgets.QWidget):
 
         self.asset_catagories.setCurrentIndex(1) #set catagory to second option
 
-
     def write_json_to_local(self):
         assets_types = ["hdris", "textures", "models"]
         for type in assets_types:
@@ -260,6 +252,7 @@ class MainAssetBrowserUI(QtWidgets.QWidget):
         while layout.count():
             child = layout.takeAt(0)
             self.status_bar.setText("clearing %s from contant area."%(child.widget().objectName()))
+            # print("\nclearing: %s \n"%(child.widget().objectName()))
             if child.widget():
                 child.widget().deleteLater()
 
@@ -294,26 +287,27 @@ class MainAssetBrowserUI(QtWidgets.QWidget):
     def asset_clicked(self):
         name = self.sender().objectName()
         tex_res = self.tex_res.currentText()
-        asset_fomat = self.asset_format.currentText()
-        path_to_check = "{0}{1}_{2}.{3}".format(download_folder, name, tex_res, asset_fomat)
-        if not os.path.exists(path_to_check):
-            self.progress_bar.setProperty("visible", True)
-            self.progress_bar.setValue(0)
-            asset_json = requests.get(asset_url + name).json()
-            self.url = asset_json["hdri"][tex_res][asset_fomat]["url"]
-            self.file_size = asset_json["hdri"][tex_res][asset_fomat]["size"]
+        print(name)
+        # asset_fomat = self.asset_format.currentText()
+        # path_to_check = "{0}{1}_{2}.{3}".format(download_folder, name, tex_res, asset_fomat)
+        # if not os.path.exists(path_to_check):
+        #     self.progress_bar.setProperty("visible", True)
+        #     self.progress_bar.setValue(0)
+        #     asset_json = requests.get(asset_url + name).json()
+        #     self.url = asset_json["hdri"][tex_res][asset_fomat]["url"]
+        #     self.file_size = asset_json["hdri"][tex_res][asset_fomat]["size"]
 
-            local_file_name = download_folder + os.path.basename(self.url)
-            self.local_file = open(local_file_name, "wb")
+        #     local_file_name = download_folder + os.path.basename(self.url)
+        #     self.local_file = open(local_file_name, "wb")
 
-            #worker for download assets
-            worker = Worker(self.downloadImage)
-            worker.signals.result.connect(self.print_output)
-            worker.signals.finished.connect(self.thread_complete)
-            worker.signals.progress.connect(self.progress_fn)
+        #     #worker for download assets
+        #     worker = Worker(self.downloadImage)
+        #     worker.signals.result.connect(self.print_output)
+        #     worker.signals.finished.connect(self.thread_complete)
+        #     worker.signals.progress.connect(self.progress_fn)
 
-            #start the workder thread / execute
-            self.threadpool.start(worker)
+        #     #start the workder thread / execute
+        #     self.threadpool.start(worker)
         
 
 
@@ -336,15 +330,15 @@ class MainAssetBrowserUI(QtWidgets.QWidget):
 
     def progress_fn(self, n):
         # print("Progress : " , n)
-        i = self.progress_bar.setValue(n)
-        self.status_bar.setText(str(os.path.basename(self.url)) + ", Downloading : " + str(n))
+        self.progress_bar.setValue(n)
+        self.status_bar.setText("Loading : " + str(n) + "%")
 
     def print_output(self, s):
         # print("Result : ", s)
         pass
 
     def thread_complete(self):
-        self.status_bar.setText(str(os.path.basename(self.url)))
+        self.status_bar.setText("Done")
         self.progress_bar.setProperty("visible", False)
         self.check_asset_download_status()
         # print("Task Done!")
