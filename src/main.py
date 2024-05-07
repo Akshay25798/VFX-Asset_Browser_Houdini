@@ -3,7 +3,7 @@ import hou
 from PySide2 import QtNetwork
 from PySide2 import QtWidgets, QtGui, QtCore
 from PySide2.QtUiTools import QUiLoader
-from PySide2.QtCore import Qt
+from PySide2.QtCore import Qt, QThread, Signal
 import json, requests, os
 from .worker import Worker
 from .flowLayout import FlowLayout
@@ -44,8 +44,32 @@ def get_houdini_icon(icon, size=50):
 
 ##--class starts
 
+class GetLocalIcons(QThread):
+    rowLoaded = Signal(list)  # Signal to emit when a row is loaded
+    def __init__(self, parent, key, idx, total_assets):
+        self.key = key
+        self.total_assets = total_assets
+        self.idx = idx
+        # self.parent = parent
+        super(GetLocalIcons, self).__init__(parent)
 
-                       
+    def run(self):
+        # print("Thread")
+        size = 200
+        key = self.key #str(self.parent().objectName())
+        self.parent().setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+        self.parent().setFixedSize(QtCore.QSize(size, size))
+        self.parent().setIconSize(QtCore.QSize(size, size))
+        self.parent().setText(key.replace("_", " ").title())
+        self.parent().setStyleSheet("QToolButton{font-family: Roboto}")
+
+        thumb_name = ("{0}.png".format(key))
+        get_local_thumb = thumbnail_folder + thumb_name
+
+        progress = int(self.idx) / int(self.total_assets) * 100
+        self.rowLoaded.emit([self.parent(), get_local_thumb, progress])  # Emitting the loaded row
+                    
+
 class IconDownloader(QtCore.QObject):
     def __init__(self, parent, req):
         self.req = req
@@ -69,9 +93,10 @@ class IconDownloader(QtCore.QObject):
         icon = QtGui.QIcon()
         icon.addPixmap(local_file_path)
         self.parent().setIcon(icon)
+        print(local_file_path)
 
 
-class MainAssetBrowserUI(QtWidgets.QWidget):
+class MainAssetBrowserUI(QtWidgets.QWidget): #main class
     def __init__(self):
         super(MainAssetBrowserUI, self).__init__()
         print("Asset_Brower_Started\n")
@@ -156,55 +181,37 @@ class MainAssetBrowserUI(QtWidgets.QWidget):
             for key in data.keys():
                 if current_catagory in (data[key]["categories"]):
                     self.asset_in_catagory.append(key) #add asset to self.asset_in_catagory list
-
+        
+        
         for i, key in enumerate(self.asset_in_catagory): #get and set thumbnails for assets in catagory
             
             btn = QtWidgets.QToolButton()
             btn.setObjectName(key)
             self.assets_view.addWidget(btn)
             btn.clicked.connect(self.asset_clicked)
-            self.status_bar.setText("total assets : %s"%(len(self.asset_in_catagory)))
-            # print(key)
-        # time.sleep(1)
-        total_assets = len(self.asset_in_catagory)
-        worker = Worker(self.set_local_icon, total_assets)
-        worker.signals.progress.connect(self.progress_fn)
-        worker.signals.finished.connect(self.thread_complete)
-        self.threadpool.start(worker)
+            total_assets = len(self.asset_in_catagory)
+            self.status_bar.setText("total assets : %s"%(total_assets))
+            
+            thumb_name = ("{0}.png".format(key))
+            if not thumb_name in os.listdir(thumbnail_folder): #get icons form api
+                print("not in local")
+                self.status_bar.setText("downloading %s thumbnail"%(thumb_name))
+                url = thumb_url + key + ".png?height=" + str(500)
+                req = QtNetwork.QNetworkRequest(QtCore.QUrl(url))
+                download = IconDownloader(btn, req)
+                download.start_fetch(self.download_queue)
+                
+            get_local_icon = GetLocalIcons(btn, key, i, total_assets)
+            get_local_icon.rowLoaded.connect(self.set_local_icon)  # Connecting the signal to slot
+            get_local_icon.start()
+        # print("Main thread compelete")
 
        
-
-    def set_local_icon(self, total_assets, progress_callback, size=200):
-        icons = self.contentArea.findChildren(QtWidgets.QToolButton)
-        self.progress_bar.setProperty("visible", True)
-        self.progress_bar.setValue(0)
-        print("Thread\n")
-        for i, btn in enumerate(icons):
-            key = str(btn.objectName())
-            print(key)
-            btn.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
-            btn.setFixedSize(QtCore.QSize(size, size))
-            btn.setIconSize(QtCore.QSize(size, size))
-            # btn.setText(key.replace("_", " ").title())
-            # btn.setStyleSheet("QToolButton{font-family: Roboto}")
-
-            thumb_name = ("{0}.png".format(key))
-            # if not thumb_name in os.listdir(thumbnail_folder): #get icons form api
-            #     # print("not in local")
-            #     self.status_bar.setText("downloading %s thumbnail"%(thumb_name))
-            #     url = thumb_url + key + ".png?height=" + str(500)
-            #     req = QtNetwork.QNetworkRequest(QtCore.QUrl(url))
-                
-            #     download = IconDownloader(btn, req)
-            #     download.start_fetch(self.download_queue)
-
-            get_local_thumb = thumbnail_folder + thumb_name
-            icon = QtGui.QIcon()
-            icon.addPixmap(get_local_thumb)
-            btn.setIcon(icon)
-            # # print(os.listdir(thumbnail_folder))
-            progress = int(i) / int(total_assets) * 100
-            progress_callback.emit(progress)
+    def set_local_icon(self, btn):
+        icon = QtGui.QIcon()
+        icon.addPixmap(btn[1])
+        btn[0].setIcon(icon)
+        self.progress_fn(btn[2])
 
 
     def set_cagagories(self):
@@ -329,9 +336,12 @@ class MainAssetBrowserUI(QtWidgets.QWidget):
         self.local_file.close()
 
     def progress_fn(self, n):
-        # print("Progress : " , n)
+        self.progress_bar.setProperty("visible", True)
+        self.progress_bar.setValue(0)
         self.progress_bar.setValue(n)
-        self.status_bar.setText("Loading : " + str(n) + "%")
+        # self.status_bar.setText("Loading : " + str(n) + "%")
+
+        self.progress_bar.setProperty("visible", False)
 
     def print_output(self, s):
         # print("Result : ", s)
@@ -344,4 +354,3 @@ class MainAssetBrowserUI(QtWidgets.QWidget):
         # print("Task Done!")
 
 
-    
