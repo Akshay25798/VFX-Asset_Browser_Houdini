@@ -1,13 +1,13 @@
-from ast import arg
 import hou
+import viewerstate.utils as su
 from PySide2 import QtNetwork
+from PySide2.QtWidgets import QMenu, QPushButton
+from PySide2.QtGui import QDrag
 from PySide2 import QtWidgets, QtGui, QtCore
 from PySide2.QtUiTools import QUiLoader
-from PySide2.QtCore import Qt, QThread, Signal
+from PySide2.QtCore import Qt, QThread, Signal, QMimeData
 import json, requests, os
-from .worker import Worker
 from .flowLayout import FlowLayout
-import time
 
 ##
 #path construntion
@@ -68,7 +68,7 @@ class GetLocalIcons(QThread):
 
         progress = int(self.idx) / int(self.total_assets) * 100
         self.rowLoaded.emit([self.parent(), get_local_thumb, progress])  # Emitting the loaded row
-                    
+                
 
 class IconDownloader(QtCore.QObject):
     def __init__(self, parent, req):
@@ -93,13 +93,14 @@ class IconDownloader(QtCore.QObject):
         icon = QtGui.QIcon()
         icon.addPixmap(local_file_path)
         self.parent().setIcon(icon)
-        print(local_file_path)
+        # print(local_file_path)
 
 
 class MainAssetBrowserUI(QtWidgets.QWidget): #main class
     def __init__(self):
         super(MainAssetBrowserUI, self).__init__()
         print("Asset_Brower_Started\n")
+        self.setAcceptDrops(True)
         #managers 
         self.download_queue = QtNetwork.QNetworkAccessManager()
         self.threadpool = QtCore.QThreadPool.globalInstance()
@@ -138,12 +139,14 @@ class MainAssetBrowserUI(QtWidgets.QWidget): #main class
         #set ui widgets property
         self.progress_bar.setProperty("visible", False)
 
+
         self.set_cagagories()
         # self.set_icons()
         self.asset_type.currentIndexChanged.connect(self.set_cagagories)
         self.asset_type.currentIndexChanged.connect(self.set_icons)
         
         self.asset_catagories.currentIndexChanged.connect(self.set_icons)
+        # self.asset_catagories.currentIndexChanged.connect(self.check_asset_download_status)
 
         self.icon_size_slider.valueChanged.connect(self.set_icons_size)
         self.tex_res.currentIndexChanged.connect(self.check_asset_download_status)
@@ -152,9 +155,10 @@ class MainAssetBrowserUI(QtWidgets.QWidget): #main class
         self.scrol_area_splitter.setStretchFactor(0,3)
         self.scrol_area_splitter.setStretchFactor(1,1)
 
+
         self.setLayout(self.main_layout)
-
-
+        path = r"D:\PYTHON\VFX-Asset_Browser_Houdini\src\houdiniPythonState.py"
+        hou.ui.registerViewerStateFile(path)
 
 
     ##--functions starts--
@@ -182,19 +186,21 @@ class MainAssetBrowserUI(QtWidgets.QWidget): #main class
                 if current_catagory in (data[key]["categories"]):
                     self.asset_in_catagory.append(key) #add asset to self.asset_in_catagory list
         
-        
+
         for i, key in enumerate(self.asset_in_catagory): #get and set thumbnails for assets in catagory
             
-            btn = QtWidgets.QToolButton()
+            btn = DragButton() #QtWidgets.QToolButton()
             btn.setObjectName(key)
             self.assets_view.addWidget(btn)
+
+            
             btn.clicked.connect(self.asset_clicked)
             total_assets = len(self.asset_in_catagory)
-            self.status_bar.setText("total assets : %s"%(total_assets))
+            self.status_bar.setText("total assets : %s"%(total_assets))       
             
             thumb_name = ("{0}.png".format(key))
             if not thumb_name in os.listdir(thumbnail_folder): #get icons form api
-                print("not in local")
+                # print("not in local")
                 self.status_bar.setText("downloading %s thumbnail"%(thumb_name))
                 url = thumb_url + key + ".png?height=" + str(500)
                 req = QtNetwork.QNetworkRequest(QtCore.QUrl(url))
@@ -204,9 +210,19 @@ class MainAssetBrowserUI(QtWidgets.QWidget): #main class
             get_local_icon = GetLocalIcons(btn, key, i, total_assets)
             get_local_icon.rowLoaded.connect(self.set_local_icon)  # Connecting the signal to slot
             get_local_icon.start()
+        self.check_asset_download_status()
         # print("Main thread compelete")
 
-       
+    #qt drops
+    def dragEnterEvent(self, e):
+        e.accept()
+
+    def dropEvent(self, e):
+        pos = e.pos()
+        widget = e.source()
+        print(e.mimeData().text())
+        e.accept()
+
     def set_local_icon(self, btn):
         icon = QtGui.QIcon()
         icon.addPixmap(btn[1])
@@ -235,7 +251,8 @@ class MainAssetBrowserUI(QtWidgets.QWidget): #main class
             for i, key in enumerate(catagory):
                 self.asset_catagories.insertItem(i, key)
 
-        self.asset_catagories.setCurrentIndex(1) #set catagory to second option
+        self.asset_catagories.setCurrentIndex(0) #set catagory option
+        self.asset_catagories.setItemText(0, "None")
 
     def write_json_to_local(self):
         assets_types = ["hdris", "textures", "models"]
@@ -264,14 +281,9 @@ class MainAssetBrowserUI(QtWidgets.QWidget): #main class
                 child.widget().deleteLater()
 
     def check_asset_download_status(self):
-        icons = self.contentArea.findChildren(QtWidgets.QToolButton)
-        border_size = 3
-        for icon in icons:
-            local_asset_name = (("{0}_{1}.{2}".format(icon.objectName(), self.tex_res.currentText(), self.asset_format.currentText())))
-            if local_asset_name in os.listdir(download_folder):
-                icon.setStyleSheet("QToolButton{border: %spx solid #32CD32}"%(border_size))
-            else:
-                icon.setStyleSheet("QToolButton{border: %spx solid #32CD32}"%(0))
+        size = self.icon_size_slider.value()
+        self.set_icons_size(size)
+
 
     def set_icons_size(self, size):
         icons = self.contentArea.findChildren(QtWidgets.QToolButton)
@@ -292,19 +304,34 @@ class MainAssetBrowserUI(QtWidgets.QWidget): #main class
         
 
     def asset_clicked(self):
+        if self.asset_type.currentIndex() == 0:
+            asset_type ="hdri"
+            folder_name = "Hdris\\"
+        elif self.asset_type.currentIndex() == 1:
+            asset_type ="fbx"
+            folder_name = "Textures\\"
+        elif self.asset_type.currentIndex() == 2:
+            asset_type ="blend"
+            folder_name = "Models\\"
+        else:
+            asset_type = "hdri"
+
+
         name = self.sender().objectName()
         tex_res = self.tex_res.currentText()
-        print(name)
-        # asset_fomat = self.asset_format.currentText()
-        # path_to_check = "{0}{1}_{2}.{3}".format(download_folder, name, tex_res, asset_fomat)
-        # if not os.path.exists(path_to_check):
-        #     self.progress_bar.setProperty("visible", True)
+        asset_fomat = self.asset_format.currentText()
+        path_to_check = "{0}{1}{2}_{3}.{4}".format(download_folder, folder_name, name, tex_res, asset_fomat)
+
+        asset_json = requests.get(asset_url + name).json()
+        print(asset_json['hdri'].keys())
+
+        # if not os.path.exists(path_to_check): #download asset if not exists
         #     self.progress_bar.setValue(0)
         #     asset_json = requests.get(asset_url + name).json()
-        #     self.url = asset_json["hdri"][tex_res][asset_fomat]["url"]
+        #     self.url = asset_json[asset_type][tex_res][asset_fomat]["url"]
         #     self.file_size = asset_json["hdri"][tex_res][asset_fomat]["size"]
 
-        #     local_file_name = download_folder + os.path.basename(self.url)
+        #     local_file_name = download_folder + folder_name + os.path.basename(self.url)
         #     self.local_file = open(local_file_name, "wb")
 
         #     #worker for download assets
@@ -339,9 +366,10 @@ class MainAssetBrowserUI(QtWidgets.QWidget): #main class
         self.progress_bar.setProperty("visible", True)
         self.progress_bar.setValue(0)
         self.progress_bar.setValue(n)
-        # self.status_bar.setText("Loading : " + str(n) + "%")
-
         self.progress_bar.setProperty("visible", False)
+        # self.status_bar.setText("Loading : " + str(n) + "%")
+        
+        
 
     def print_output(self, s):
         # print("Result : ", s)
@@ -351,6 +379,41 @@ class MainAssetBrowserUI(QtWidgets.QWidget): #main class
         self.status_bar.setText("Done")
         self.progress_bar.setProperty("visible", False)
         self.check_asset_download_status()
+        self.progress_bar.setProperty("visible", False)
         # print("Task Done!")
+
+    def contextMenuEvent(self, event):
+        menu = QMenu(self)
+        Action1 = menu.addAction("Create Mantra Light")
+        action = menu.exec_(self.mapToGlobal(event.pos()))
+
+        if action == Action1:
+            print(event.QPoint())
+            # print(self.sender().objectName())
+
+
+class DragButton(QtWidgets.QToolButton):
+
+    def mouseMoveEvent(self, e):
+
+        if e.buttons() == Qt.LeftButton:
+            scene_viewer = hou.ui.paneTabOfType(hou.paneTabType.SceneViewer)
+            scene_viewer.setCurrentState("Ak_Asset_Browser")
+            drag = QDrag(self)
+            mime = QMimeData()
+            node = QtCore.QByteArray()
+            node.setRawData("/obj/cam1", 16)
+            mime.setData(hou.qt.mimeType.nodePath, node)
+            mime.setText(str(node))
+
+            drag.setMimeData(mime)
+
+            pixmap = QtGui.QPixmap(self.size())
+            self.render(pixmap)
+            drag.setPixmap(pixmap)
+
+            drag.setMimeData(mime)
+            drag.exec_(Qt.MoveAction)
+
 
 

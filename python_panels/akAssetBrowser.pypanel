@@ -7,6 +7,7 @@
  in a single file. -->
   <interface name="akAssetBrowser" label="Ak Asset Browser" icon="hicon:/SVGIcons.index?BUTTONS_addasset.svg" showNetworkNavigationBar="false" help_url="">
     <script><![CDATA[print("executing_from_houdini")
+import hou
 import sys
 sys.path.append("D:\PYTHON\VFX-Asset_Browser_Houdini")
 
@@ -16,7 +17,11 @@ from importlib import reload
 reload(main)
 
 def createInterface():
-    return main.MainAssetBrowserUI()]]></script>
+    return main.MainAssetBrowserUI()
+    
+    
+def onActivateInterface():
+    pass]]></script>
     <includeInToolbarMenu menu_position="105" create_separator="false"/>
     <help><![CDATA[]]></help>
   </interface>
