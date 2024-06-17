@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>853</width>
-    <height>607</height>
+    <width>847</width>
+    <height>591</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -103,6 +103,13 @@
           </size>
          </property>
         </spacer>
+       </item>
+       <item>
+        <widget class="QCheckBox" name="checkBox">
+         <property name="text">
+          <string>Available</string>
+         </property>
+        </widget>
        </item>
        <item>
         <widget class="QComboBox" name="catagories">
@@ -208,8 +215,8 @@
           <rect>
            <x>0</x>
            <y>0</y>
-           <width>416</width>
-           <height>494</height>
+           <width>409</width>
+           <height>455</height>
           </rect>
          </property>
         </widget>
@@ -223,8 +230,8 @@
           <rect>
            <x>0</x>
            <y>0</y>
-           <width>416</width>
-           <height>494</height>
+           <width>409</width>
+           <height>455</height>
           </rect>
          </property>
         </widget>
