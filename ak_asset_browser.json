@@ -1,0 +1,8 @@
+{
+	"enable" : true,
+	"env": [
+		{"hpath" : "D:\PYTHON\VFX-Asset_Browser_Houdini"},
+		{"HOUDINI_PATH" : "D:\PYTHON\VFX-Asset_Browser_Houdini"}
+
+		]
+}
