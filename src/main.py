@@ -244,7 +244,7 @@ class MainAssetBrowserUI(QtWidgets.QWidget, State): #main class
                     total_assets = len(self.asset_in_catagory)
                     self.total_assets_count.setText("Total Assets : %s" %(total_assets))
 
-                    if not thumb_name in os.listdir(thumbnail_folder): #get icons form api
+                    if not thumb_name in os.listdir(type): #get icons form api
                         # print("not in local")
                         self.status_bar.setText("downloading %s thumbnail"%(thumb_name))
                         url = thumb_url + key + ".png?height=" + str(500)
@@ -312,17 +312,33 @@ class MainAssetBrowserUI(QtWidgets.QWidget, State): #main class
             self.action1.triggered.connect(self.action1_triggered)
             self.action2.triggered.connect(self.action2_triggered)
             self.context_menu.exec_(QtGui.QCursor.pos())
+            
+        sel = hou.selectedNodes()
+        selected_node = ""
+        if sel:
+            selected_node = sel[-1]
+        selected_node.addEventCallback((hou.nodeEventType.BeingDeleted,), self.remove_bg_image)
 
     def action1_triggered(self):
         selection_name = self.asset_name
         selection = "mantraLgt"
         State.create_hdri_node(self, selection, selection_name)
-        print(selection_name)
+        # print(selection_name)
 
     def action2_triggered(self):
         selection_name = self.asset_name
         selection = "prmanLgt"
         State.create_hdri_node(self, selection, selection_name)
+
+
+    def remove_bg_image(self, **kwargs):
+        deletingNode = [x[1] for x in kwargs.items()][0]
+        image = deletingNode.parm("bg_image_parm").eval()
+        editor = hou.ui.paneTabOfType(hou.paneTabType.NetworkEditor)
+        bg_image = editor.backgroundImages()
+        bg_image = tuple(x for x in bg_image if hou.expandString(x.path()) != hou.expandString(image))
+        editor.setBackgroundImages(bg_image)
+        utils.saveBackgroundImages(editor.pwd(), bg_image)
 
     def set_categories(self):
         if len(os.listdir(json_folder))==0: #check and download json files
@@ -563,7 +579,7 @@ class DragButton(QToolButton, State):
         selection_name = self.objectName()
         selection = "mantraLgt"
         State.create_hdri_node(self, selection, selection_name)
-        print(selection_name)
+        # print(selection_name)
 
     def action2_triggered(self):
         selection_name = self.objectName()
